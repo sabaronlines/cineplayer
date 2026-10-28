@@ -1,0 +1,14 @@
+{
+  "ads": {
+    "preRoll": {
+      "enabled": true,
+      "type": "vast",
+      "vastUrl": "https://s.mngts.com/vast.xml?zoneid=8593415",
+      "skipAfter": 5
+    },
+    "onDownloadClick": {
+      "enabled": true,
+      "directUrl": "https://otieuwou.net/4/8593412"
+    }
+  }
+}
