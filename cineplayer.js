@@ -29,7 +29,7 @@
     const adsData = await cpFetchAds(config.adApiUrl);
     const imdbId = (config.src || '').match(/tt\d{7,9}/) ? config.src.match(/tt\d{7,9}/)[0] : 'Movie';
 
-    // Player styling
+    // Player Shell Styling
     container.style.position = 'relative';
     container.style.width = config.width ? (typeof config.width === 'number' ? config.width + 'px' : config.width) : '100%';
     container.style.maxWidth = '100%';
@@ -57,7 +57,7 @@
     video.playsInline = true;
     container.appendChild(video);
 
-    // 3. Custom Watermark (Logo / Text)
+    // 3. Custom Watermark (Logo ya Text)
     if (config.watermark) {
       const wm = document.createElement('div');
       wm.style.cssText = 'position:absolute;top:15px;right:15px;z-index:20;pointer-events:none;opacity:0.85;';
@@ -67,23 +67,33 @@
       container.appendChild(wm);
     }
 
-    // 4. Custom Control Bar
+    // 4. Custom Control Bar (Dual Audio + Multi-Quality + Download Button)
     const controls = document.createElement('div');
-    controls.style.cssText = 'position:absolute;bottom:0;left:0;right:0;padding:10px 14px;background:linear-gradient(transparent, rgba(0,0,0,0.95));display:flex;align-items:center;gap:10px;z-index:20;opacity:0;transition:opacity 0.3s;';
+    controls.style.cssText = 'position:absolute;bottom:0;left:0;right:0;padding:10px 14px;background:linear-gradient(transparent, rgba(0,0,0,0.95));display:flex;align-items:center;gap:8px;z-index:20;opacity:0;transition:opacity 0.3s;flex-wrap:nowrap;';
     controls.innerHTML = `
       <button id="cp-play" style="background:none;border:none;color:#fff;font-size:17px;cursor:pointer;">▶</button>
       <input type="range" id="cp-seek" min="0" max="100" value="0" style="flex:1;cursor:pointer;accent-color:#f59e0b;">
       <span id="cp-time" style="font-size:11px;color:#bbb;min-width:65px;">00:00 / 00:00</span>
-      <select id="cp-quality" style="background:#111;color:#f59e0b;border:1px solid #444;font-size:11px;padding:3px 6px;border-radius:4px;cursor:pointer;outline:none;">
+      
+      <!-- Dual Audio Selector -->
+      <select id="cp-audio" title="Audio Language" style="background:#111;color:#10b981;border:1px solid #059669;font-size:11px;font-weight:bold;padding:3px 5px;border-radius:4px;cursor:pointer;outline:none;">
+        <option value="-1">🔊 Audio</option>
+      </select>
+
+      <!-- Video Quality Selector -->
+      <select id="cp-quality" title="Video Quality" style="background:#111;color:#f59e0b;border:1px solid #444;font-size:11px;padding:3px 5px;border-radius:4px;cursor:pointer;outline:none;">
         <option value="1080">1080p</option>
         <option value="720" selected>720p</option>
         <option value="480">480p</option>
         <option value="360">360p</option>
         <option value="240">240p</option>
       </select>
-      <button id="cp-download" style="background:#f59e0b;border:none;color:#000;font-size:11px;font-weight:bold;padding:5px 9px;border-radius:4px;cursor:pointer;">
+
+      <!-- Download Button -->
+      <button id="cp-download" style="background:#f59e0b;border:none;color:#000;font-size:11px;font-weight:bold;padding:5px 8px;border-radius:4px;cursor:pointer;">
         ⬇ Download
       </button>
+
       <button id="cp-fs" style="background:none;border:none;color:#fff;font-size:15px;cursor:pointer;">⛶</button>
     `;
     container.appendChild(controls);
@@ -91,13 +101,13 @@
     container.onmouseenter = () => controls.style.opacity = '1';
     container.onmouseleave = () => controls.style.opacity = '0';
 
-    // 5. Convert & Download Modal UI
+    // 5. Convert & Download Modal
     const modal = document.createElement('div');
     modal.style.cssText = 'position:absolute;inset:0;background:rgba(5,8,17,0.96);display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;z-index:50;color:#fff;backdrop-filter:blur(6px);text-align:center;';
     modal.innerHTML = `
       <div style="background:#111827;border:1px solid #374151;border-radius:12px;padding:24px;max-width:380px;width:100%;">
         <h4 style="margin:0 0 8px 0;font-size:16px;color:#f59e0b;">Video Converter</h4>
-        <p style="font-size:12px;color:#9ca3af;margin:0 0 16px 0;">ID: ${imdbId} • <span id="cp-target-res" style="color:#fff;font-weight:bold;">720p</span></p>
+        <p style="font-size:12px;color:#9ca3af;margin:0 0 16px 0;">ID: ${imdbId} • <span id="cp-target-res" style="color:#fff;font-weight:bold;">720p</span> • <span id="cp-target-aud" style="color:#10b981;font-weight:bold;">Audio</span></p>
         <div style="width:100%;background:#1f2937;height:8px;border-radius:4px;overflow:hidden;margin-bottom:12px;">
           <div id="cp-pbar" style="width:0%;height:100%;background:#f59e0b;transition:width 0.2s linear;"></div>
         </div>
@@ -160,7 +170,7 @@
       container.appendChild(adBox);
     }
 
-    // 7. Video Stream Setup
+    // 7. Video Stream Setup (HLS.js + Dual Audio Handling)
     cpLoadScript('https://cdn.jsdelivr.net/npm/hls.js@latest', function () {
       runPreRollAd(() => {
         const streamSrc = config.streamUrl || 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
@@ -168,34 +178,67 @@
           const hls = new Hls();
           hls.loadSource(streamSrc);
           hls.attachMedia(video);
+
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
             loader.remove();
             video.play().catch(() => console.log('Autoplay muted'));
           });
+
+          // Detect Dual Audio Tracks
+          hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (event, data) => {
+            const audioSelect = document.getElementById('cp-audio');
+            audioSelect.innerHTML = '';
+            
+            if (data.audioTracks && data.audioTracks.length > 0) {
+              data.audioTracks.forEach((track, index) => {
+                const opt = document.createElement('option');
+                opt.value = index;
+                opt.text = `🔊 ${track.name || track.lang || 'Track ' + (index + 1)}`;
+                if (track.default) opt.selected = true;
+                audioSelect.appendChild(opt);
+              });
+            } else {
+              audioSelect.innerHTML = '<option value="-1">🔊 Default Audio</option>';
+            }
+          });
+
+          // Switch Audio Track
+          document.getElementById('cp-audio').onchange = (e) => {
+            const trackIndex = parseInt(e.target.value);
+            if (trackIndex >= 0) {
+              hls.audioTrack = trackIndex;
+            }
+          };
+
         }
       });
     });
 
-    // 8. Download & Auto-Convert Click
+    // 8. Download & Auto-Convert Click Action
     const dlBtn = document.getElementById('cp-download');
     const qSelect = document.getElementById('cp-quality');
+    const aSelect = document.getElementById('cp-audio');
     let convTimer = null;
 
     dlBtn.onclick = () => {
+      // Direct Link Monetization
       if (adsData && adsData.onDownloadClick && adsData.onDownloadClick.enabled) {
         window.open(adsData.onDownloadClick.directUrl, '_blank');
       }
 
       video.pause();
       const targetRes = qSelect.value;
+      const targetAudio = aSelect.options[aSelect.selectedIndex] ? aSelect.options[aSelect.selectedIndex].text.replace('🔊 ', '') : 'Dual Audio';
+
       document.getElementById('cp-target-res').innerText = `${targetRes}p`;
+      document.getElementById('cp-target-aud').innerText = targetAudio;
 
       const pbar = document.getElementById('cp-pbar');
       const status = document.getElementById('cp-status');
       const actionArea = document.getElementById('cp-action-area');
 
       pbar.style.width = '0%';
-      status.innerText = 'Please wait ⏳ Converting stream to MP4...';
+      status.innerText = `Please wait ⏳ Muxing ${targetAudio} with ${targetRes}p...`;
       actionArea.innerHTML = `<button id="cp-cancel" style="background:#374151;border:none;color:#fff;padding:8px 14px;border-radius:6px;font-size:12px;cursor:pointer;">Cancel</button>`;
       document.getElementById('cp-cancel').onclick = () => {
         clearInterval(convTimer);
@@ -211,17 +254,17 @@
         pbar.style.width = `${progress}%`;
 
         if (progress >= 30 && progress < 75) {
-          status.innerText = `Please wait ⏳ Encoding ${targetRes}p Video... (${progress}%)`;
+          status.innerText = `Please wait ⏳ Encoding ${targetRes}p Video + ${targetAudio}... (${progress}%)`;
         } else if (progress >= 75 && progress < 100) {
-          status.innerText = `Please wait ⏳ Finalizing MP4 Container... (${progress}%)`;
+          status.innerText = `Please wait ⏳ Finalizing Dual Audio MP4... (${progress}%)`;
         }
 
         if (progress === 100) {
           clearInterval(convTimer);
-          status.innerHTML = `✅ <b>Conversion Complete!</b> (${targetRes}p)`;
+          status.innerHTML = `✅ <b>Conversion Complete!</b> (${targetRes}p • ${targetAudio})`;
 
           const dlUrl = config.downloadBaseUrl
-            ? `${config.downloadBaseUrl}?id=${imdbId}&res=${targetRes}`
+            ? `${config.downloadBaseUrl}?id=${imdbId}&res=${targetRes}&audio=${encodeURIComponent(targetAudio)}`
             : (config.downloadUrl || '#');
 
           actionArea.innerHTML = `
